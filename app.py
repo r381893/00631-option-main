@@ -207,16 +207,19 @@ FIREBASE_DATABASE_URL = "https://l-op-bf09b-default-rtdb.asia-southeast1.firebas
 # 初始化 Firebase (只執行一次)
 import firebase_admin
 from firebase_admin import credentials, db
+import os
 
 if "firebase_initialized" not in st.session_state:
     try:
-        # 嘗試從 Streamlit secrets 取得憑證 (Streamlit Cloud)
-        if hasattr(st, 'secrets') and 'firebase' in st.secrets:
+        # 優先嘗試本機開發：使用 JSON 檔案
+        if os.path.exists("firebase_key.json"):
+            cred = credentials.Certificate("firebase_key.json")
+        # Streamlit Cloud：從 secrets 取得憑證
+        elif hasattr(st, 'secrets') and 'firebase' in st.secrets:
             cred_dict = dict(st.secrets["firebase"])
             cred = credentials.Certificate(cred_dict)
         else:
-            # 本機開發：使用 JSON 檔案
-            cred = credentials.Certificate("firebase_key.json")
+            raise FileNotFoundError("找不到 Firebase 憑證")
         
         firebase_admin.initialize_app(cred, {
             'databaseURL': FIREBASE_DATABASE_URL
