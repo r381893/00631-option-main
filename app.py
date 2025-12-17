@@ -401,80 +401,28 @@ if (etf_lots != old_etf_lots or
 
 # ======== 主頁面 ========
 
-# ======== 檔案操作區 ========
-with st.container():
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
-    st.markdown('<div class="section-title">📂 檔案操作</div>', unsafe_allow_html=True)
-    
-    # 第一行：下載和上傳
-    col_download, col_upload = st.columns(2)
-    
-    with col_download:
-        # 準備下載資料
-        download_data = {
-            "etf_lots": st.session_state.etf_lots,
-            "etf_cost": st.session_state.etf_cost,
+# ======== 操作按鈕 ========
+col1, col2 = st.columns(2)
+with col1:
+    if st.button("🔄 重新整理價格", use_container_width=True, help="重新抓取最新的 ETF 和指數價格"):
+        st.cache_data.clear()
+        st.success("✅ 已清除快取，將重新載入價格")
+        st.rerun()
+with col2:
+    if st.button("🧹 清空所有倉位", use_container_width=True):
+        st.session_state.option_positions = []
+        st.session_state.etf_lots = 0.0
+        st.session_state.etf_cost = 0.0
+        st.session_state.hedge_ratio = 0.2
+        save_data({
+            "etf_lots": 0.0,
+            "etf_cost": 0.0,
             "etf_current_price": st.session_state.etf_current_price,
-            "hedge_ratio": st.session_state.hedge_ratio,
-            "option_positions": st.session_state.option_positions
-        }
-        json_str = json.dumps(download_data, ensure_ascii=False, indent=2)
-        
-        st.download_button(
-            label="📥 下載備份",
-            data=json_str,
-            file_name="hedge_positions_backup.json",
-            mime="application/json",
-            use_container_width=True,
-            help="下載目前的倉位資料到您的電腦"
-        )
-    
-    with col_upload:
-        uploaded_file = st.file_uploader(
-            "📤 上傳備份",
-            type=["json"],
-            label_visibility="collapsed",
-            help="上傳之前下載的 JSON 備份檔",
-            key="json_uploader"
-        )
-        
-        if uploaded_file is not None:
-            try:
-                # 讀取並解析檔案
-                uploaded_data = json.loads(uploaded_file.getvalue().decode("utf-8"))
-                
-                # 顯示預覽
-                preview_positions = len(uploaded_data.get("option_positions", []))
-                preview_lots = uploaded_data.get("etf_lots", 0)
-                st.caption(f"📋 {preview_lots:.1f} 張, {preview_positions} 筆倉位")
-                
-                if st.button("✅ 確認載入", key="confirm_load"):
-                    st.session_state.etf_lots = float(uploaded_data.get("etf_lots", 0.0))
-                    st.session_state.etf_cost = float(uploaded_data.get("etf_cost", 0.0))
-                    st.session_state.hedge_ratio = float(uploaded_data.get("hedge_ratio", 0.2))
-                    st.session_state.option_positions = uploaded_data.get("option_positions", [])
-                    st.success("✅ 載入成功！請關閉上傳框")
-            except Exception as e:
-                st.error(f"❌ 格式錯誤")
-    
-    st.markdown("<hr style='margin: 10px 0;'>", unsafe_allow_html=True)
-    
-    # 第二行：其他操作
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("🔄 重新整理價格", use_container_width=True, help="重新抓取最新的 ETF 和指數價格"):
-            st.cache_data.clear()
-            st.success("✅ 已清除快取，將重新載入價格")
-            st.rerun()
-    with col2:
-        if st.button("🧹 清空所有倉位", use_container_width=True):
-            st.session_state.option_positions = []
-            st.session_state.etf_lots = 0.0
-            st.session_state.etf_cost = 0.0
-            st.session_state.hedge_ratio = 0.2
-            st.success("已清空所有資料")
-            st.rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
+            "hedge_ratio": 0.2,
+            "option_positions": []
+        })
+        st.success("已清空所有資料")
+        st.rerun()
 
 # ======== 00631L 庫存摘要 ========
 if etf_lots > 0:
