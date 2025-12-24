@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#6366f1">
+    <title>00631L 避險助手</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icon-192.svg">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Noto Sans TC', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #f5f7ff 0%, #e8ecff 50%, #f0f4ff 100%);
+            min-height: 100vh;
+        }
+
+        .glass {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+        }
+
+        input[type="number"] {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        .pnl-positive {
+            color: #10b981;
+        }
+
+        .pnl-negative {
+            color: #ef4444;
+        }
+
+        #toast {
+            transition: opacity 0.3s ease;
+        }
+
+        .card {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 4px 20px rgba(99, 102, 241, 0.1);
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 20px;
+            padding: 16px;
+            color: white;
+        }
+
+        .stat-item {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 12px;
+            padding: 12px;
+            text-align: center;
+        }
+
+        .input-field {
+            background: #f8fafc;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 10px 14px;
+            font-size: 14px;
+            font-weight: 600;
+            width: 100%;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .input-field:focus {
+            border-color: #6366f1;
+        }
+
+        .section-header {
+            font-size: 14px;
+            font-weight: 700;
+            color: #334155;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        @keyframes slide-up {
+            from {
+                transform: translateY(100%);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .animate-slide-up {
+            animation: slide-up 0.3s ease-out;
+        }
+    </style>
+</head>
+
+<body class="pb-28">
+
+    <!-- Toast 通知 -->
+    <div id="toast"
+        class="fixed top-5 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-xs px-4 py-2 rounded-full opacity-0 z-[100] pointer-events-none shadow-lg">
+        資料已同步
+    </div>
+
+    <!-- Header -->
+    <header
+        class="bg-gradient-to-br from-indigo-600 to-violet-700 pt-12 pb-10 px-6 rounded-b-[40px] shadow-xl text-center text-white">
+        <h1 class="text-xl font-black tracking-wider">
+            <i class="fas fa-shield-halved mr-2"></i>00631L 避險助手
+        </h1>
+        <p class="text-indigo-100 text-xs mt-1 opacity-80">Firebase 雲端同步版</p>
+    </header>
+
+    <main class="px-4 -mt-6 space-y-4 max-w-lg mx-auto">
+
+        <!-- 總資產摘要卡片 -->
+        <div class="stat-card">
+            <div class="text-xs font-semibold opacity-80 mb-3">📊 總資產摘要</div>
+            <div class="grid grid-cols-3 gap-2">
+                <div class="stat-item">
+                    <div class="text-[10px] opacity-70">總成本</div>
+                    <div id="totalCost" class="text-sm font-bold">$0</div>
+                </div>
+                <div class="stat-item">
+                    <div class="text-[10px] opacity-70">目前市值</div>
+                    <div id="totalMarket" class="text-sm font-bold">$0</div>
+                </div>
+                <div class="stat-item" id="pnlCard">
+                    <div class="text-[10px] opacity-70">總損益</div>
+                    <div id="totalPnl" class="text-sm font-bold">$0</div>
+                    <div id="totalPnlPct" class="text-[10px]">0%</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 00631L 庫存 -->
+        <div class="card p-4">
+            <div class="section-header">
+                <i class="fas fa-coins text-indigo-500"></i> 00631L 庫存
+            </div>
+            <div class="grid grid-cols-3 gap-3 mb-3">
+                <div>
+                    <label class="text-[10px] font-bold text-slate-400 block mb-1">持有張數</label>
+                    <input type="number" id="etfLots" value="0" step="0.1" class="input-field">
+                </div>
+                <div>
+                    <label class="text-[10px] font-bold text-slate-400 block mb-1">平均成本</label>
+                    <input type="number" id="etfCost" value="0" step="0.1" class="input-field">
+                </div>
+                <div>
+                    <label class="text-[10px] font-bold text-slate-400 block mb-1">現價</label>
+                    <input type="number" id="etfPrice" value="0" step="0.1" class="input-field">
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="text-[10px] font-bold text-slate-400 block mb-1">加權指數</label>
+                    <input type="number" id="indexPrice" value="23000" step="10" class="input-field">
+                </div>
+                <div>
+                    <label class="text-[10px] font-bold text-slate-400 block mb-1">未實現損益</label>
+                    <div id="etfPnl" class="input-field bg-slate-100 text-center font-bold pnl-positive">$0</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 現金持有 -->
+        <div class="card p-4">
+            <div class="section-header">
+                <i class="fas fa-wallet text-emerald-500"></i> 現金持有
+            </div>
+            <div class="grid grid-cols-3 gap-3">
+                <div>
+                    <label class="text-[10px] font-bold text-slate-400 block mb-1">現金成本</label>
+                    <input type="number" id="cashCost" value="0" step="1000" class="input-field">
+                </div>
+                <div>
+                    <label class="text-[10px] font-bold text-slate-400 block mb-1">目前現金</label>
+                    <input type="number" id="cashCurrent" value="0" step="1000" class="input-field">
+                </div>
+                <div>
+                    <label class="text-[10px] font-bold text-slate-400 block mb-1">現金損益</label>
+                    <div id="cashPnl" class="input-field bg-slate-100 text-center font-bold pnl-positive">$0</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 選擇權倉位 -->
+        <div class="card p-4">
+            <div class="section-header">
+                <i class="fas fa-list-check text-violet-500"></i> 選擇權倉位
+                <span id="hedgeInfo" class="ml-auto text-[10px] font-normal text-slate-400">建議避險: 0 口</span>
+            </div>
+            <div id="positionList" class="space-y-2 mb-3"></div>
+
+            <!-- 權利金收支摘要 -->
+            <div id="premiumSummary" class="bg-slate-50 rounded-xl p-3 mb-3 text-sm hidden">
+                <div class="flex justify-between mb-1">
+                    <span class="text-slate-500">賣出權利金收入</span>
+                    <span id="premiumIn" class="font-bold pnl-positive">+$0</span>
+                </div>
+                <div class="flex justify-between mb-2">
+                    <span class="text-slate-500">買進權利金支出</span>
+                    <span id="premiumOut" class="font-bold pnl-negative">-$0</span>
+                </div>
+                <div class="border-t border-slate-200 pt-2 flex justify-between">
+                    <span class="font-bold text-slate-700">淨權利金</span>
+                    <span id="premiumNet" class="font-bold">$0</span>
+                </div>
+            </div>
+
+            <button onclick="toggleAddModal()"
+                class="w-full py-3 bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 text-sm font-bold hover:bg-slate-100 active:scale-95 transition-transform">
+                + 新增避險倉位
+            </button>
+        </div>
+
+        <!-- 損益曲線圖 -->
+        <div class="card p-4">
+            <div class="section-header">
+                <i class="fas fa-chart-line text-indigo-500"></i> 損益曲線
+            </div>
+            <div class="h-48">
+                <canvas id="pnlChart"></canvas>
+            </div>
+        </div>
+
+        <!-- 損益試算表 -->
+        <div class="card p-4">
+            <div class="section-header">
+                <i class="fas fa-table text-emerald-500"></i> 損益試算表
+            </div>
+            <div class="overflow-x-auto -mx-2">
+                <table class="w-full text-xs">
+                    <thead>
+                        <tr class="bg-slate-100 text-slate-600">
+                            <th class="py-2 px-2 text-left font-bold">結算指數</th>
+                            <th class="py-2 px-2 text-center font-bold">變動</th>
+                            <th class="py-2 px-2 text-right font-bold">00631L</th>
+                            <th class="py-2 px-2 text-right font-bold">選擇權</th>
+                            <th class="py-2 px-2 text-right font-bold">總損益</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pnlTableBody" class="divide-y divide-slate-100">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- 新增倉位 Modal -->
+    <div id="addModal" class="fixed inset-0 bg-black/50 z-50 flex items-end justify-center hidden">
+        <div class="bg-white w-full max-w-lg rounded-t-[32px] p-6 animate-slide-up">
+            <div class="flex justify-between items-center mb-5">
+                <h3 class="text-lg font-black">新增倉位</h3>
+                <button onclick="toggleAddModal()" class="text-slate-400 p-2"><i
+                        class="fas fa-times text-xl"></i></button>
+            </div>
+            <div class="space-y-4">
+                <!-- 產品選擇 -->
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="setProduct('台指')" id="btnTaifex"
+                        class="py-2.5 rounded-xl font-bold text-sm bg-indigo-600 text-white">台指選擇權</button>
+                    <button onclick="setProduct('微台')" id="btnMicro"
+                        class="py-2.5 rounded-xl font-bold text-sm bg-slate-100 text-slate-500">微台期貨</button>
+                </div>
+                <!-- 類型選擇 -->
+                <div id="typeButtons" class="grid grid-cols-2 gap-2">
+                    <button onclick="setType('Put')" id="btnPut"
+                        class="py-2.5 rounded-xl font-bold text-sm bg-indigo-600 text-white">賣權 Put</button>
+                    <button onclick="setType('Call')" id="btnCall"
+                        class="py-2.5 rounded-xl font-bold text-sm bg-slate-100 text-slate-500">買權 Call</button>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div id="directionField">
+                        <label class="text-xs font-bold text-slate-400 mb-1 block">方向</label>
+                        <select id="newDir" class="input-field">
+                            <option value="買進">買進</option>
+                            <option value="賣出">賣出</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-slate-400 mb-1 block">履約價/進場價</label>
+                        <input type="number" id="newStrike" class="input-field">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-xs font-bold text-slate-400 mb-1 block">口數</label>
+                        <input type="number" id="newLots" value="1" class="input-field">
+                    </div>
+                    <div id="premiumField">
+                        <label class="text-xs font-bold text-slate-400 mb-1 block">權利金(點)</label>
+                        <input type="number" id="newPrem" value="100" class="input-field">
+                    </div>
+                </div>
+                <button onclick="addPosition()"
+                    class="w-full bg-indigo-600 text-white py-3.5 rounded-2xl font-bold shadow-lg shadow-indigo-200 active:scale-95 transition-transform">
+                    確認新增
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 底部導航 -->
+    <nav
+        class="fixed bottom-0 left-0 right-0 glass border-t border-slate-100 px-6 py-3 flex justify-around items-center max-w-lg mx-auto z-40">
+        <button onclick="syncData()" class="flex flex-col items-center gap-1 text-indigo-600">
+            <i class="fas fa-cloud-arrow-up text-lg"></i>
+            <span class="text-[10px] font-bold">同步</span>
+        </button>
+        <div onclick="toggleAddModal()"
+            class="w-14 h-14 bg-gradient-to-br from-indigo-600 to-violet-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-300 -mt-8 border-4 border-white cursor-pointer active:scale-95 transition-transform">
+            <i class="fas fa-plus text-xl"></i>
+        </div>
+        <button onclick="refreshPrice()" class="flex flex-col items-center gap-1 text-slate-400">
+            <i class="fas fa-rotate text-lg"></i>
+            <span class="text-[10px] font-bold">刷新</span>
+        </button>
+    </nav>
+
+    <script>
+        // ========== Firebase 設定 ==========
+        const firebaseConfig = {
+            apiKey: "AIzaSyDummyKey",
+            databaseURL: "https://l-op-bf09b-default-rtdb.asia-southeast1.firebasedatabase.app"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        // ========== 狀態管理 ==========
+        let positions = [];
+        let newProduct = '台指';
+        let newType = 'Put';
+        let chart = null;
+        let saveTimeout = null;
+        let isSaving = false;           // 防止重複儲存
+        let isLoading = false;          // 載入中標記
+        let pendingSave = false;        // 有待處理的儲存
+        let lastSaveTime = 0;           // 上次儲存時間
+        let isLocalChange = false;      // 標記本地變更（避免監聽觸發覆蓋）
+
+        // ========== 同步狀態指示器 ==========
+        function showSyncStatus(status) {
+            const toast = document.getElementById('toast');
+            const statusMap = {
+                'saving': { text: '⏳ 儲存中...', color: 'bg-amber-600' },
+                'saved': { text: '✅ 已同步', color: 'bg-emerald-600' },
+                'loading': { text: '📥 載入中...', color: 'bg-blue-600' },
+                'error': { text: '❌ 同步失敗', color: 'bg-red-600' },
+                'synced': { text: '🔄 已同步更新', color: 'bg-indigo-600' }
+            };
+            const info = statusMap[status] || { text: status, color: 'bg-slate-800' };
+            toast.innerText = info.text;
+            toast.className = `fixed top-5 left-1/2 -translate-x-1/2 ${info.color} text-white text-xs px-4 py-2 rounded-full z-[100] pointer-events-none shadow-lg transition-opacity`;
+            toast.classList.remove('opacity-0');
+            if (status === 'saved' || status === 'synced') {
+                setTimeout(() => toast.classList.add('opacity-0'), 1500);
+            }
+        }
+
+        // ========== 資料載入（首次） ==========
+        async function loadData() {
+            if (isLoading) return;
+            isLoading = true;
+            showSyncStatus('loading');
+
+            try {
+                const snapshot = await db.ref('hedge_positions').once('value');
+                const data = snapshot.val();
+                applyData(data);
+                showSyncStatus('saved');
+            } catch (e) {
+                console.error('Load error:', e);
+                showSyncStatus('error');
+            } finally {
+                isLoading = false;
+            }
+        }
+
+        // ========== 套用資料到 UI ==========
+        function applyData(data) {
+            if (!data) return;
+
+            document.getElementById('etfLots').value = data.etf_lots ?? 0;
+            document.getElementById('etfCost').value = data.etf_cost ?? 0;
+            document.getElementById('etfPrice').value = data.etf_current_price ?? 0;
+            document.getElementById('cashCost').value = data.cash_cost ?? 0;
+            document.getElementById('cashCurrent').value = data.cash_current ?? 0;
+
+            // 驗證並修復 positions 資料
+            if (Array.isArray(data.option_positions)) {
+                positions = data.option_positions.filter(p =>
+                    p && typeof p === 'object' &&
+                    (p.strike !== undefined || p.lots !== undefined)
+                );
+            } else {
+                positions = [];
+            }
+
+            calculate();
+        }
+
+        // ========== Firebase 即時監聽 ==========
+        function setupRealtimeListener() {
+            db.ref('hedge_positions').on('value', (snapshot) => {
+                // 如果是本地變更觸發的，忽略
+                if (isLocalChange) {
+                    isLocalChange = false;
+                    return;
+                }
+
+                // 如果正在儲存，忽略
+                if (isSaving) return;
+
+                const data = snapshot.val();
+                if (data) {
+                    console.log('📥 收到雲端更新');
+                    applyData(data);
+                    showSyncStatus('synced');
+                }
+            }, (error) => {
+                console.error('Realtime listener error:', error);
+            });
+        }
+
+        // ========== 資料儲存（防止競爭條件）==========
+        async function saveData() {
+            // 如果正在儲存，標記待處理
+            if (isSaving) {
+                pendingSave = true;
+                return;
+            }
+
+            // 防止過於頻繁儲存（至少間隔 500ms）
+            const now = Date.now();
+            if (now - lastSaveTime < 500) {
+                pendingSave = true;
+                setTimeout(() => {
+                    if (pendingSave) {
+                        pendingSave = false;
+                        saveData();
+                    }
+                }, 500);
+                return;
+            }
+
+            isSaving = true;
+            isLocalChange = true;  // 標記為本地變更
+            lastSaveTime = now;
+            showSyncStatus('saving');
+
+            // 深拷貝 positions 避免儲存過程中被修改
+            const positionsCopy = JSON.parse(JSON.stringify(positions));
+
+            const data = {
+                etf_lots: parseFloat(document.getElementById('etfLots').value) || 0,
+                etf_cost: parseFloat(document.getElementById('etfCost').value) || 0,
+                etf_current_price: parseFloat(document.getElementById('etfPrice').value) || 0,
+                cash_cost: parseFloat(document.getElementById('cashCost').value) || 0,
+                cash_current: parseFloat(document.getElementById('cashCurrent').value) || 0,
+                hedge_ratio: 0.4,
+                option_positions: positionsCopy,
+                last_updated: Date.now()  // 新增時間戳記
+            };
+
+            try {
+                await db.ref('hedge_positions').set(data);
+                showSyncStatus('saved');
+            } catch (e) {
+                console.error('Save error:', e);
+                showSyncStatus('error');
+                isLocalChange = false;  // 儲存失敗，重置標記
+            } finally {
+                isSaving = false;
+
+                // 處理待處理的儲存
+                if (pendingSave) {
+                    pendingSave = false;
+                    setTimeout(saveData, 100);
+                }
+            }
+        }
+
+        function autoSave() {
+            if (saveTimeout) clearTimeout(saveTimeout);
+            saveTimeout = setTimeout(saveData, 1000);  // 縮短到 1 秒
+        }
+
+        function syncData() {
+            if (saveTimeout) clearTimeout(saveTimeout);
+            saveData();
+        }
+
+        // ========== 計算邏輯 ==========
+        function calculate() {
+            const etfLots = parseFloat(document.getElementById('etfLots').value) || 0;
+            const etfCost = parseFloat(document.getElementById('etfCost').value) || 0;
+            const etfPrice = parseFloat(document.getElementById('etfPrice').value) || 0;
+            const cashCost = parseFloat(document.getElementById('cashCost').value) || 0;
+            const cashCurrent = parseFloat(document.getElementById('cashCurrent').value) || 0;
+
+            // ETF 損益
+            const etfShares = etfLots * 1000;
+            const etfMarketVal = etfShares * etfPrice;
+            const etfCostVal = etfShares * etfCost;
+            const etfPnl = etfMarketVal - etfCostVal;
+
+            // 現金損益
+            const cashPnl = cashCurrent - cashCost;
+
+            // 總資產
+            const totalCost = etfCostVal + cashCost;
+            const totalMarket = etfMarketVal + cashCurrent;
+            const totalPnl = etfPnl + cashPnl;
+            const totalPnlPct = totalCost > 0 ? (totalPnl / totalCost * 100) : 0;
+
+            // 更新顯示
+            document.getElementById('etfPnl').innerText = formatCurrency(etfPnl);
+            document.getElementById('etfPnl').className = `input-field bg-slate-100 text-center font-bold ${etfPnl >= 0 ? 'pnl-positive' : 'pnl-negative'}`;
+
+            document.getElementById('cashPnl').innerText = formatCurrency(cashPnl);
+            document.getElementById('cashPnl').className = `input-field bg-slate-100 text-center font-bold ${cashPnl >= 0 ? 'pnl-positive' : 'pnl-negative'}`;
+
+            document.getElementById('totalCost').innerText = formatCurrency(totalCost);
+            document.getElementById('totalMarket').innerText = formatCurrency(totalMarket);
+            document.getElementById('totalPnl').innerText = formatCurrency(totalPnl);
+            document.getElementById('totalPnlPct').innerText = (totalPnlPct >= 0 ? '+' : '') + totalPnlPct.toFixed(2) + '%';
+
+            const pnlCard = document.getElementById('pnlCard');
+            pnlCard.style.background = totalPnl >= 0 ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)';
+
+            // 避險建議
+            document.getElementById('hedgeInfo').innerText = `建議避險: ${(etfLots * 0.4).toFixed(1)} 口 小台`;
+
+            // 使用輸入的加權指數
+            const centerIndex = parseFloat(document.getElementById('indexPrice').value) || 23000;
+
+            renderPositions();
+            updateChart(centerIndex, etfPrice, etfCost, etfLots);
+            updatePnlTable(centerIndex, etfPrice, etfCost, etfLots);
+        }
+
+        function formatCurrency(val) {
+            const absVal = Math.abs(Math.round(val));
+            const formatted = absVal.toLocaleString();
+            if (val >= 0) return '$' + formatted;
+            return '-$' + formatted;
+        }
+
+        // ========== 倉位管理 ==========
+        function renderPositions() {
+            const list = document.getElementById('positionList');
+            const summaryDiv = document.getElementById('premiumSummary');
+            list.innerHTML = '';
+
+            if (positions.length === 0) {
+                list.innerHTML = '<div class="text-center text-slate-400 text-sm py-4">尚無避險倉位</div>';
+                summaryDiv.classList.add('hidden');
+                return;
+            }
+
+            // 計算權利金收支
+            let premiumIn = 0;  // 賣出收入
+            let premiumOut = 0; // 買進支出
+
+            positions.forEach((p, index) => {
+                const isFutures = p.product === '微台期貨' || p.type === 'Futures';
+                const item = document.createElement('div');
+                item.className = "flex justify-between items-center p-3 bg-slate-50 rounded-xl";
+
+                if (isFutures) {
+                    item.innerHTML = `
+                        <div>
+                            <div class="flex gap-1.5 mb-1">
+                                <span class="text-[10px] px-2 py-0.5 rounded-md font-bold bg-violet-100 text-violet-700">微台期貨</span>
+                                <span class="text-[10px] px-2 py-0.5 rounded-md font-bold bg-rose-100 text-rose-700">做空</span>
+                            </div>
+                            <div class="text-sm font-bold text-slate-700">
+                                進場 ${(p.strike || 0).toLocaleString()} × ${p.lots || 0}口
+                            </div>
+                        </div>
+                        <button onclick="removePosition(${index})" class="text-slate-300 hover:text-rose-500 p-2"><i class="fas fa-trash-can"></i></button>
+                    `;
+                } else {
+                    // 計算權利金
+                    const mult = p.product === '微台' ? 10 : 50;
+                    const premiumValue = (p.premium || 0) * (p.lots || 0) * mult;
+                    if (p.direction === '賣出') {
+                        premiumIn += premiumValue;
+                    } else {
+                        premiumOut += premiumValue;
+                    }
+
+                    const typeColor = p.type === 'Put' ? 'bg-indigo-100 text-indigo-700' : 'bg-amber-100 text-amber-700';
+                    const dirColor = p.direction === '買進' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700';
+                    const premiumColor = p.direction === '賣出' ? 'pnl-positive' : 'pnl-negative';
+                    const premiumSign = p.direction === '賣出' ? '+' : '-';
+                    item.innerHTML = `
+                        <div>
+                            <div class="flex gap-1.5 mb-1">
+                                <span class="text-[10px] px-2 py-0.5 rounded-md font-bold ${typeColor}">${p.type}</span>
+                                <span class="text-[10px] px-2 py-0.5 rounded-md font-bold ${dirColor}">${p.direction}</span>
+                            </div>
+                            <div class="text-sm font-bold text-slate-700">
+                                ${(p.strike || 0).toLocaleString()} × ${p.lots || 0}口 <span class="text-slate-400 font-normal">@${p.premium || 0}</span>
+                                <span class="${premiumColor} text-xs ml-1">${premiumSign}$${premiumValue.toLocaleString()}</span>
+                            </div>
+                        </div>
+                        <button onclick="removePosition(${index})" class="text-slate-300 hover:text-rose-500 p-2"><i class="fas fa-trash-can"></i></button>
+                    `;
+                }
+                list.appendChild(item);
+            });
+
+            // 更新權利金收支摘要
+            const netPremium = premiumIn - premiumOut;
+            if (premiumIn > 0 || premiumOut > 0) {
+                summaryDiv.classList.remove('hidden');
+                document.getElementById('premiumIn').innerText = '+$' + premiumIn.toLocaleString();
+                document.getElementById('premiumOut').innerText = '-$' + premiumOut.toLocaleString();
+                document.getElementById('premiumNet').innerText = (netPremium >= 0 ? '+$' : '-$') + Math.abs(netPremium).toLocaleString();
+                document.getElementById('premiumNet').className = `font-bold ${netPremium >= 0 ? 'pnl-positive' : 'pnl-negative'}`;
+            } else {
+                summaryDiv.classList.add('hidden');
+            }
+        }
+
+        function toggleAddModal() {
+            const modal = document.getElementById('addModal');
+            modal.classList.toggle('hidden');
+            // 預設履約價
+            const etfPrice = parseFloat(document.getElementById('etfPrice').value) || 23000;
+            document.getElementById('newStrike').value = Math.round(etfPrice * 100);
+        }
+
+        function setProduct(product) {
+            newProduct = product;
+            document.getElementById('btnTaifex').className = `py-2.5 rounded-xl font-bold text-sm ${product === '台指' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500'}`;
+            document.getElementById('btnMicro').className = `py-2.5 rounded-xl font-bold text-sm ${product === '微台' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500'}`;
+
+            // 微台期貨隱藏類型和方向
+            document.getElementById('typeButtons').style.display = product === '微台' ? 'none' : 'grid';
+            document.getElementById('directionField').style.display = product === '微台' ? 'none' : 'block';
+            document.getElementById('premiumField').style.display = product === '微台' ? 'none' : 'block';
+        }
+
+        function setType(type) {
+            newType = type;
+            document.getElementById('btnPut').className = `py-2.5 rounded-xl font-bold text-sm ${type === 'Put' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500'}`;
+            document.getElementById('btnCall').className = `py-2.5 rounded-xl font-bold text-sm ${type === 'Call' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500'}`;
+        }
+
+        function addPosition() {
+            const strike = parseFloat(document.getElementById('newStrike').value) || 0;
+            const lots = parseInt(document.getElementById('newLots').value) || 1;
+
+            if (newProduct === '微台') {
+                positions.push({
+                    product: '微台期貨',
+                    type: 'Futures',
+                    direction: '做空',
+                    strike: strike,
+                    lots: lots,
+                    premium: 0
+                });
+            } else {
+                positions.push({
+                    product: '台指',
+                    type: newType,
+                    direction: document.getElementById('newDir').value,
+                    strike: strike,
+                    lots: lots,
+                    premium: parseFloat(document.getElementById('newPrem').value) || 0
+                });
+            }
+
+            toggleAddModal();
+            calculate();
+            saveData(); // 立即儲存，不用延遲
+        }
+
+        function removePosition(index) {
+            positions.splice(index, 1);
+            calculate();
+            saveData(); // 立即儲存，不用延遲
+        }
+
+        // ========== 圖表 ==========
+        function updateChart(centerIdx, etfPrice, etfCost, etfLots) {
+            const canvas = document.getElementById('pnlChart');
+            if (!canvas) return;
+
+            const range = 1500;
+            const step = 300;
+            const data = [];
+            const labels = [];
+
+            for (let idx = centerIdx - range; idx <= centerIdx + range; idx += step) {
+                const changePct = (idx - centerIdx) / centerIdx;
+                const simEtfPrice = etfPrice * (1 + changePct * 2);
+                const etfPnl = (simEtfPrice - etfCost) * etfLots * 1000;
+
+                let optPnl = 0;
+                positions.forEach(p => {
+                    if (p.type === 'Futures') {
+                        optPnl += (p.strike - idx) * p.lots * 10;
+                    } else {
+                        const mult = p.product === '微台' ? 10 : 50;
+                        const intrinsic = p.type === 'Put' ? Math.max(0, p.strike - idx) : Math.max(0, idx - p.strike);
+                        optPnl += (p.direction === '買進' ? (intrinsic - p.premium) : (p.premium - intrinsic)) * p.lots * mult;
+                    }
+                });
+
+                data.push(Math.round(etfPnl + optPnl));
+                labels.push((idx / 1000).toFixed(1) + 'k');
+            }
+
+            if (chart) chart.destroy();
+            chart = new Chart(canvas, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        borderColor: '#6366f1',
+                        borderWidth: 3,
+                        tension: 0.4,
+                        pointRadius: 0,
+                        fill: true,
+                        backgroundColor: 'rgba(99, 102, 241, 0.1)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 10 } } },
+                        x: { grid: { display: false }, ticks: { font: { size: 9 } } }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        // ========== 損益試算表 ==========
+        function updatePnlTable(centerIndex, etfPrice, etfCost, etfLots) {
+            const tbody = document.getElementById('pnlTableBody');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+
+            // 從 -1500 到 +1500，每 100 點一格
+            const steps = [];
+            for (let delta = -1500; delta <= 1500; delta += 100) {
+                steps.push(delta);
+            }
+
+            steps.forEach(delta => {
+                const settlementIndex = centerIndex + delta;
+                const changePct = delta / centerIndex;
+
+                // 00631L 損益（2倍槓桿）
+                const simEtfPrice = etfPrice * (1 + changePct * 2);
+                const etfPnl = (simEtfPrice - etfCost) * etfLots * 1000;
+
+                // 選擇權損益
+                let optPnl = 0;
+                positions.forEach(p => {
+                    if (p.type === 'Futures') {
+                        // 微台期貨：做空，每點10元
+                        optPnl += (p.strike - settlementIndex) * p.lots * 10;
+                    } else {
+                        const mult = p.product === '微台' ? 10 : 50;
+                        const intrinsic = p.type === 'Put'
+                            ? Math.max(0, p.strike - settlementIndex)
+                            : Math.max(0, settlementIndex - p.strike);
+                        optPnl += (p.direction === '買進'
+                            ? (intrinsic - p.premium)
+                            : (p.premium - intrinsic)) * p.lots * mult;
+                    }
+                });
+
+                const totalPnl = etfPnl + optPnl;
+
+                // 建立表格行
+                const row = document.createElement('tr');
+                row.className = delta === 0 ? 'bg-indigo-50' : '';
+                row.innerHTML = `
+                    <td class="py-2 px-2 font-medium">${settlementIndex.toLocaleString()}</td>
+                    <td class="py-2 px-2 text-center ${delta === 0 ? 'font-bold text-indigo-600' : 'text-slate-500'}">${delta >= 0 ? '+' : ''}${delta.toLocaleString()}</td>
+                    <td class="py-2 px-2 text-right font-bold ${etfPnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">${formatPnl(etfPnl)}</td>
+                    <td class="py-2 px-2 text-right font-bold ${optPnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">${formatPnl(optPnl)}</td>
+                    <td class="py-2 px-2 text-right font-bold ${totalPnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">${formatPnl(totalPnl)}</td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        function formatPnl(val) {
+            const rounded = Math.round(val);
+            if (rounded >= 0) return '+' + rounded.toLocaleString();
+            return rounded.toLocaleString();
+        }
+
+        // ========== 刷新價格 ==========
+        async function refreshPrice() {
+            showToast('正在從 Yahoo 抓取價格...');
+
+            try {
+                // 嘗試多個 CORS proxy
+                const proxies = [
+                    'https://corsproxy.io/?',
+                    'https://api.allorigins.win/raw?url=',
+                    'https://cors-anywhere.herokuapp.com/'
+                ];
+
+                let etfPrice = null;
+                let indexPrice = null;
+
+                for (const proxy of proxies) {
+                    try {
+                        // 抓取 00631L 價格
+                        const etfUrl = proxy + encodeURIComponent('https://query1.finance.yahoo.com/v8/finance/chart/00631L.TW');
+                        const etfRes = await fetch(etfUrl, { timeout: 5000 });
+                        if (etfRes.ok) {
+                            const etfData = await etfRes.json();
+                            etfPrice = etfData?.chart?.result?.[0]?.meta?.regularMarketPrice;
+                        }
+
+                        // 抓取加權指數
+                        const indexUrl = proxy + encodeURIComponent('https://query1.finance.yahoo.com/v8/finance/chart/^TWII');
+                        const indexRes = await fetch(indexUrl, { timeout: 5000 });
+                        if (indexRes.ok) {
+                            const indexData = await indexRes.json();
+                            indexPrice = indexData?.chart?.result?.[0]?.meta?.regularMarketPrice;
+                        }
+
+                        if (etfPrice || indexPrice) break; // 成功就跳出
+                    } catch (err) {
+                        console.log('Proxy failed:', proxy, err);
+                        continue;
+                    }
+                }
+
+                if (etfPrice) {
+                    document.getElementById('etfPrice').value = etfPrice.toFixed(2);
+                }
+                if (indexPrice) {
+                    document.getElementById('indexPrice').value = Math.round(indexPrice);
+                }
+
+                if (etfPrice || indexPrice) {
+                    calculate();
+                    showToast(`已更新：00631L ${etfPrice?.toFixed(2) || '?'} / 指數 ${indexPrice ? Math.round(indexPrice) : '?'}`);
+                } else {
+                    showToast('抓取失敗，請手動輸入');
+                }
+            } catch (e) {
+                console.error('Fetch error:', e);
+                showToast('抓取失敗，請手動輸入');
+            }
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            toast.innerText = msg;
+            toast.classList.remove('opacity-0');
+            setTimeout(() => toast.classList.add('opacity-0'), 2000);
+        }
+
+        // ========== 初始化 ==========
+        document.addEventListener('DOMContentLoaded', async () => {
+            // 首次載入資料
+            await loadData();
+
+            // 啟動即時監聽（載入完成後）
+            setupRealtimeListener();
+
+            // 綁定輸入事件
+            ['etfLots', 'etfCost', 'etfPrice', 'indexPrice', 'cashCost', 'cashCurrent'].forEach(id => {
+                document.getElementById(id).addEventListener('input', () => {
+                    calculate();
+                    autoSave();
+                });
+            });
+        });
+
+        // 頁面可見性變更時重新同步
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                console.log('📱 頁面重新可見，檢查資料同步');
+                // 不需要重新載入，因為 realtime listener 會自動同步
+            }
+        });
+
+        // 註冊 Service Worker
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js').catch(e => console.log('SW error:', e));
+        }
+    </script>
+
+</body>
+
+</html>

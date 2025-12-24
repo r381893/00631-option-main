@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>00631L 避險計算器</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Microsoft JhengHei', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            background: rgba(255,255,255,0.95);
+            border-radius: 24px;
+            padding: 40px;
+            max-width: 400px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            text-align: center;
+        }
+        .logo {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+        h1 {
+            color: #1e293b;
+            font-size: 24px;
+            margin-bottom: 8px;
+        }
+        .subtitle {
+            color: #64748b;
+            font-size: 14px;
+            margin-bottom: 32px;
+        }
+        .status {
+            background: #f0f9ff;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 24px;
+            color: #0369a1;
+            font-size: 14px;
+        }
+        .spinner {
+            width: 24px;
+            height: 24px;
+            border: 3px solid #e2e8f0;
+            border-top-color: #6366f1;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 12px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        a.btn {
+            display: block;
+            padding: 14px 24px;
+            border-radius: 12px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 15px;
+            transition: all 0.2s;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            color: white;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(99,102,241,0.4);
+        }
+        .btn-secondary {
+            background: #f1f5f9;
+            color: #475569;
+        }
+        .btn-secondary:hover {
+            background: #e2e8f0;
+        }
+        .device-info {
+            margin-top: 24px;
+            font-size: 12px;
+            color: #94a3b8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">🛡️</div>
+        <h1>00631L 避險計算器</h1>
+        <p class="subtitle">選擇權組合策略保護工具</p>
+        
+        <div class="status" id="status">
+            <div class="spinner"></div>
+            <span>正在偵測裝置類型...</span>
+        </div>
+        
+        <div class="buttons">
+            <a href="https://r88235234.github.io/00631-option-main/pwa/" class="btn btn-primary" id="mobileBtn">
+                📱 手機版 (PWA)
+            </a>
+            <a href="https://00631l-hedge.streamlit.app/" class="btn btn-secondary" id="desktopBtn">
+                💻 電腦版 (Streamlit)
+            </a>
+        </div>
+        
+        <p class="device-info" id="deviceInfo"></p>
+    </div>
+
+    <script>
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
+                         || (window.innerWidth < 768)
+                         || ('ontouchstart' in window);
+        
+        const statusEl = document.getElementById('status');
+        const deviceInfoEl = document.getElementById('deviceInfo');
+        
+        // 更新狀態顯示
+        if (isMobile) {
+            statusEl.innerHTML = '📱 偵測到手機裝置，即將導向 PWA 版...';
+            deviceInfoEl.textContent = `螢幕寬度: ${window.innerWidth}px`;
+            // 自動導向
+            setTimeout(() => {
+                window.location.href = 'https://r88235234.github.io/00631-option-main/pwa/';
+            }, 1500);
+        } else {
+            statusEl.innerHTML = '💻 偵測到電腦裝置，即將導向桌面版...';
+            deviceInfoEl.textContent = `螢幕寬度: ${window.innerWidth}px`;
+            // 自動導向
+            setTimeout(() => {
+                window.location.href = 'https://00631l-hedge.streamlit.app/';
+            }, 1500);
+        }
+    </script>
+</body>
+</html>

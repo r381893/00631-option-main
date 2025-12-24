@@ -4,11 +4,20 @@ hedge_positions.json
 # Firebase 金鑰 (敏感資料，不可上傳)
 firebase_key.json
 streamlit_secrets.toml
-convert_key.py
+backend/.streamlit/secrets.toml
+*.json
+!pwa/manifest.json
 
 # Python
 __pycache__/
 *.py[cod]
+*.pyo
+.Python
+env/
+venv/
+
+# 一次性工具
+convert_key.py
 
 # 系統檔案
 .DS_Store
